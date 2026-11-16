@@ -2,14 +2,14 @@
 
 user_id=$(id -u)
 logs_folder="/var/log/expense"
-logs_file="${logs_folder}/${0}.log"
+script_name="frontend"
+logs_file="${logs_folder}/${script_name}.log"
 domain_name="chinna.online"
-scripts_dir=$(dirname "$(realpath "$0")")
+
 R="\e[31m"
 G="\e[32m"
 Y="\e[33m"
 N="\e[0m"
-
 
 timestamp(){
     date "+%F %T"
@@ -51,11 +51,45 @@ cd /usr/share/nginx/html
 tar -xzf /tmp/frontend.tar.gz &>> $logs_file
 validate $? "Extracting frontend artifacts"
 
-sed -i "s/DOMAIN_NAME/$domain_name/g" "$scripts_dir/expense.conf"
-cp "$scripts_dir/expense.conf" /etc/nginx/default.d/expense.conf
+# Write Nginx reverse proxy config directly
+cat <<EOF > /etc/nginx/default.d/expense.conf
+proxy_http_version 1.1;
+proxy_set_header Host              \$host;
+proxy_set_header X-Real-IP         \$remote_addr;
+proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto \$scheme;
+proxy_connect_timeout 5s;
+proxy_read_timeout    30s;
+
+# Browser calls /api/transaction → nginx strips /api → backend gets /transaction
+location /api/ {
+    proxy_pass http://backend.${domain_name}:8080/;
+}
+
+location /health {
+    stub_status on;
+    access_log off;
+}
+
+location = /home {
+    return 301 /;
+}
+
+location = /docs {
+    return 302 https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status;
+}
+
+location /admin {
+    deny all;
+}
+EOF
+validate $? "Creating nginx expense.conf"
 
 nginx -t &>> $logs_file
 validate $? "Testing nginx configuration"
 
-sudo systemctl restart nginx &>> $logs_file
+systemctl restart nginx &>> $logs_file
 validate $? "Restarting nginx"
+
+echo "$(timestamp) [INFO] Script completed in $SECONDS seconds"
+echo "$(timestamp) [INFO] ==== Script completed Execution =====" | tee -a $logs_file

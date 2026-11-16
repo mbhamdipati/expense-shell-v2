@@ -2,9 +2,10 @@
 
 user_id=$(id -u)
 logs_folder="/var/log/expense"
-logs_file="${logs_folder}/${0}.log"
+script_name="backend"
+logs_file="${logs_folder}/${script_name}.log"
 domain_name="chinna.online"
-scripts_dir=$(dirname "$(realpath "$0")")
+# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 R="\e[31m"
 G="\e[32m"
 Y="\e[33m"
@@ -64,13 +65,40 @@ validate $? "Extracting backend artifacts"
 npm install &>> $logs_file
 validate $? "Installing backend dependencies"
 
-sed -i "s/DOMAIN_NAME/$domain_name/g" "$scripts_dir/backend.service"
-cp "$scripts_dir/backend.service" /etc/systemd/system/backend.service
 
-# sed "s/DOMAIN_NAME/$domain_name/g" "$scripts_dir/backend.service" > /etc/systemd/system/backend.service
+# sed -i "s/DOMAIN_NAME/$domain_name/g" "$SCRIPT_DIR/backend.service"
+# cp "$SCRIPT_DIR/backend.service" /etc/systemd/system/backend.service
+
+cat <<EOF > /etc/systemd/system/backend.service
+[Unit]
+Description=Expense Backend Service
+After=network.target
+
+[Service]
+User=expense
+Environment=DB_HOST=database.${domain_name}
+Environment=DB_USER=expense
+Environment=DB_PWD=ExpenseApp@1
+Environment=DB_DATABASE=transactions
+Environment=ADMIN_TOKEN=admin123
+ExecStart=/bin/node /app/index.js
+SyslogIdentifier=backend
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+validate $? "Creating backend systemd service"
 
 dnf install mysql -y &>> $logs_file
 validate $? "Installing mysql client"
+
+# Wait until database.chinna.online is reachable before loading schema
+until mysql -h "database.$domain_name" -u root -pExpenseApp@1 -e "SELECT 1;" &>> $logs_file; do
+    echo "$(timestamp) [INFO] Waiting for MySQL database to be ready..." | tee -a $logs_file
+    sleep 10
+done
 
 mysql -h "database.$domain_name" -u root -pExpenseApp@1 < /app/schema/backend.sql &>> $logs_file
 validate $? "Creating backend database"
