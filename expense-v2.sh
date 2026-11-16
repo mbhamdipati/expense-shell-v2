@@ -15,6 +15,7 @@ SCRIPT_DIR=$(cygpath -m "$PWD")
 
 MY_IP=$(curl -s https://checkip.amazonaws.com)
 declare -A SG_IDS
+INSTANCE_IPS=()
 
 for ARG in "$@"; do
     # Split each argument by ':' into 4 variables
@@ -66,9 +67,15 @@ for ARG in "$@"; do
                 --query 'Instances[0].InstanceId' \
                 --output text)
 
-        echo "$INSTANCE instance ID: $instance_id"
-
         aws ec2 wait instance-running --instance-ids "$instance_id"
+        PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "$instance_id" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+
+        INSTANCE_IPS+=("$INSTANCE: $PUBLIC_IP")
+
+        echo "$INSTANCE instance ID: $instance_id"
 
         if [ $INSTANCE != "frontend" ]; then
             IP=$(aws ec2 describe-instances \
@@ -106,3 +113,9 @@ for ARG in "$@"; do
         echo "Updated route53 record for $INSTANCE"
     fi
 done
+
+echo "Instances IPs"
+(IFS=", "; echo "${INSTANCE_IPS[*]}")
+echo ""
+echo "Wait for 5min to install all dependecies. then browse application"
+echo "ssh to each instance to check logs: 'sudo tail -f /var/log/cloud-init-output.log'"
