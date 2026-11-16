@@ -11,7 +11,7 @@ AMI_ID="ami-0055977a6e828a4f4"
 INSTANCE_TYPE="t3.micro"
 DOMAIN_NAME="chinna.online"
 HOSTED_ZONE_ID="Z0579378K5AL0YOAZ116"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR=$(cygpath -m "$PWD")
 
 MY_IP=$(curl -s https://checkip.amazonaws.com)
 declare -A SG_IDS
