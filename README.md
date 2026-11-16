@@ -11,6 +11,32 @@ An end-to-end automation script to provision and configure the **Expense V2** ap
 * **Bash** shell environment (Linux, macOS, or Git Bash / WSL on Windows).
 
 ---
+## Configuration (`.env`)
+This project uses a `.env` file to manage infrastructure settings and domain configuration as a single source of truth.
+### 1. Create your `.env` file
+Copy the provided template:
+```bash
+cp .env.example .env
+```
+### 2. Configure your parameters
+Open `.env` and set your AWS parameters:
+```env
+AMI_ID="ami-0055977a6e828a4f4"
+INSTANCE_TYPE="t3.micro"
+DOMAIN_NAME="devops.store"
+HOSTED_ZONE_ID="Z0579378K5AL0YOAZ116"
+```
+| Variable | Description | Example |
+| :--- | :--- | :--- |
+| `AMI_ID` | Target AMI ID in your selected AWS region (RHEL 9 / AlmaLinux) | `ami-0055977a6e828a4f4` |
+| `INSTANCE_TYPE` | EC2 instance size | `t3.micro` |
+| `DOMAIN_NAME` | Your base domain name registered in Route 53 | `devops.store` |
+| `HOSTED_ZONE_ID` | AWS Route 53 Hosted Zone ID for your domain | `Z0579378K5AL0YOAZ116` |
+> [!NOTE]
+> * When `main.sh` executes, it automatically injects these `.env` variables into each instance's user-data script (`database.sh`, `backend.sh`, `frontend.sh`).
+> * The `.env` file is excluded from Git via `.gitignore` to prevent committing account-specific IDs.
+
+---
 
 ## Usage
 

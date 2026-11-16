@@ -7,10 +7,22 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-AMI_ID="ami-0055977a6e828a4f4"
-INSTANCE_TYPE="t3.micro"
-DOMAIN_NAME="chinna.online"
-HOSTED_ZONE_ID="Z0579378K5AL0YOAZ116"
+# Check and load .env file
+if [ -f .env ]; then
+    set -a          # Automatically exports all variables defined in .env
+    source .env
+    set +a
+else
+    echo "Error: .env file not found! Please create one."
+    exit 1
+fi
+
+# (Optional) Validate required variables are present
+: "${AMI_ID:?AMI_ID is missing in .env}"
+: "${INSTANCE_TYPE:?INSTANCE_TYPE is missing in .env}"
+: "${DOMAIN_NAME:?DOMAIN_NAME is missing in .env}"
+: "${HOSTED_ZONE_ID:?HOSTED_ZONE_ID is missing in .env}"
+
 SCRIPT_DIR=$(cygpath -m "$PWD")
 
 MY_IP=$(curl -s https://checkip.amazonaws.com)
@@ -56,17 +68,23 @@ for ARG in "$@"; do
     echo "Created $INSTANCE ($SG_ID) allowing port $PORT from $SOURCE"
 
     if [ $INSTANCE != "common" ]; then
-
         echo "creating instance: $INSTANCE"
+        # creating temp user data to run instance with user data script
+        TMP_USER_DATA="${SCRIPT_DIR}/.tmp_${INSTANCE}.sh"
+        echo "#!/bin/bash" > "$TMP_USER_DATA"
+        cat .env >> "$TMP_USER_DATA"
+        echo "" >> "$TMP_USER_DATA"
+        tail -n +2 "${SCRIPT_DIR}/${INSTANCE}.sh" >> "$TMP_USER_DATA"
         instance_id=$(aws ec2 run-instances \
                 --image-id $AMI_ID \
                 --instance-type $INSTANCE_TYPE \
                 --security-group-ids "${SG_IDS["common"]}" "$SG_ID" \
-                --user-data "file://${SCRIPT_DIR}/${INSTANCE}.sh" \
+                --user-data "file://${TMP_USER_DATA}" \
                 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE}]" \
                 --query 'Instances[0].InstanceId' \
                 --output text)
-
+        # delete the temp file
+        rm -f "$TMP_USER_DATA"
         aws ec2 wait instance-running --instance-ids "$instance_id"
         PUBLIC_IP=$(aws ec2 describe-instances \
             --instance-ids "$instance_id" \
